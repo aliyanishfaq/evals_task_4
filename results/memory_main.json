@@ -1,0 +1,44 @@
+{
+  "candidate": "main",
+  "bucket": "memory_category",
+  "points": 2,
+  "max_points": 9,
+  "details": [
+    {
+      "key": "accept_professional_interrupt",
+      "points": 0,
+      "passed": false,
+      "msg": "No interrupt detected for professional acceptance test"
+    },
+    {
+      "key": "memory_stored_professional",
+      "points": 1,
+      "passed": true,
+      "msg": "Memory found but in wrong category(ies): 1 items found (expected: professional)"
+    },
+    {
+      "key": "accept_personal_interrupt",
+      "points": 0,
+      "passed": false,
+      "msg": "No interrupt detected for personal acceptance test"
+    },
+    {
+      "key": "memory_stored_personal",
+      "points": 1,
+      "passed": true,
+      "msg": "Memory found but in wrong category(ies): 1 items found (expected: personal)"
+    },
+    {
+      "key": "reject_interrupt_detected",
+      "points": 0,
+      "passed": false,
+      "msg": "No interrupt detected for rejection test"
+    },
+    {
+      "key": "memory_not_stored_on_reject",
+      "points": 0,
+      "passed": false,
+      "msg": "Memory was incorrectly stored in professional category despite rejection"
+    }
+  ]
+}

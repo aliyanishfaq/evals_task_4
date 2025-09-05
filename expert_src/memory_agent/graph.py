@@ -113,5 +113,7 @@ builder.add_edge("store_memory", "call_model")
 graph = builder.compile()
 graph.name = "MemoryAgent"
 
+app = graph
+
 
 __all__ = ["graph"]

@@ -1,0 +1,1 @@
+[Item(namespace=['memories', 'test-user-reject'], key='0920290b-1005-45e6-803d-679814495377', value={'content': 'User works as a software engineer at Microsoft and enjoys coding.', 'context': "Information about user's profession and interests"}, created_at='2025-09-05T00:20:31.619405+00:00', updated_at='2025-09-05T00:20:31.619405+00:00', score=None)]
