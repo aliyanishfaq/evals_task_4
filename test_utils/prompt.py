@@ -1,7 +1,7 @@
 LLM_AS_A_JUDGE_PROMPT = '''
-You are an expert coding evaluator for coding agent that researches company information. You will be provided with a coding agent's implementation and an expert-written implementation that represents the gold standard.
+You are an expert coding evaluator for agent that stores memories built using langgraph. You will be provided with a coding agent's implementation and an expert-written implementation that represents the gold standard, alongside the base code that was provided to the coding agent to start with.
 
-Your job is to evaluate the coding agent's implementation for correctness, code quality, and adherence to the expert's architectural and code cleanliness philosophy. 
+The coding agent was provided with a task to modify the existing memory agent code to store memories user id and category wise and have interrupt before saving a memory. Your job is to evaluate the coding agent's implementation for correctness, code quality, and adherence to the expert's architectural and code cleanliness philosophy. 
 You will be provided with basic requirements and good practices. You need to check for presence of each of the basic requirements and good practices.
 Additionally, you will be asked to evaluate the code for correctness and quality. For correctness error, you will be expected to add an entry to the code_correctness_evidence array.
 
@@ -13,32 +13,31 @@ Return your evaluation as a single JSON object.
 
 ## Evaluation Criteria
 
-Basic Requirements: The code must meet these core specifications for a functional Company Researcher agent. Mark `true` if present and working correctly, `false` if absent or broken.
+Basic Requirements: The code must meet these core specifications for a functional implementation of edited Memory Agent. Mark `true` if present and working correctly, `false` if absent or broken.
 
--  max_search_queries: The code should have a way to set the maximum number of search queries to be generated per requested.
--  max_search_results: The code should have a way to set the maximum number of search results to be generated per requested.
--  max_reflection_steps: The code should have a way to set the maximum number of reflection steps allowed to avoid infinite cycles.
--  reflection_step: The code should have a way to reflect on the completeness of the research and determine if additional searches are needed.
+-  presence_of_interrupt: The code should the interrupt functionality in the tool call node before saving a memory. Presence of interrupt is sufficient to award this point.
+-  user_id_and_category_wise_storage: The code should have a functionally correct implementation of storing memories category wise. Presence of this is sufficient to award this point.
+-  correct_categories: The code should only store memories in the correct three categories. Personal, Professional, Other. Point should only be award if the code is correct in terms of logic and the categories are stored correctly. If there are any other categories or no categories are stored, the point should not be awarded.
+-  category_retrieval: When code load memories, it should retrieve memories user id and category wise. Presence of this is sufficient to award this point. If the code does not look for category when retrieving memories, the point should not be awarded.
+
+Good Practices: Additional qualities of a well-designed Memory Agent for this task. Mark `true` if implemented correctly, `false` if absent.
 
 
-
-Good Practices: Additional qualities of a well-designed Company Researcher agent. Mark `true` if implemented correctly, `false` if absent.
-
-- functional_reflection: The reflection node is connected to the web search node so that if the research is not complete, the agent can execute web searches again. The implementation should also be correct in terms of logic and the paths it takes.
-- no_redundant_files: There should be no redundant files in the code. The code should be as clean and concise as possible. Return false if there are files like `test_agent.py`, `demo.py`
-- preferred_state_type: The code should use TypedDict/dataclasses for the state. Return True if the code uses TypedDict/dataclasses for the state. If it uses something else, return false.
-- separate_prompts: Expert code has separate prompts for query writing, reflection, and extraction. The code should have separate prompts for each of these. Return true if the code has separate prompts for each of these. Otherwise, return false.
-
+- functional_interrupt: The code should have a functionally correct implementation of the interrupt functionality in the tool call node before saving a memory. The implementation should be correct to be awarded full point.
+The simplest implementation for this is the one used by the expert code. If an implementation is like that, then award True. Award true for other correct implementations that save memories on user's input being accept and reject on
+everything else.
+- llm_based_categorization: The code should use the LLM to categorize the memories. Other implementations such as hardcoding, string/keyword matching are britter and this should be marked false.
+- no_test_files: There should be no test files in the code. The code should be as clean and concise as possible. Return false if there are files like `test_agent.py`, `demo.py`
 
 ## Evidence Categorization Guidelines
 
 **Code Quality Evidence** (architectural/design issues):
-- No separation of features. Each feature should be in a separate node.
-- Unnecessary complexity
-- Correct primitives for Langgraph types such as state, messages (which should be defined as Annotated[list, add_messages] in state)
+- Separate prompt in the prompt file for llm classification.
+- No unnecessary complexity
+- Correct primitives for Langgraph types such as state, messages (which should be defined as Annotated[list, add_messages] in state), context, etc.
 
 **Code Correctness Evidence** (functional/runtime bugs):
-- Runtime exceptions
+- No Runtime exceptions or type errors
 - Type errors, import failures
 
 **Remember**: NEVER put the same issue in both categories. Choose the most appropriate one.
@@ -47,16 +46,15 @@ Good Practices: Additional qualities of a well-designed Company Researcher agent
 
 {{
   "basic_requirements": {{
-    "max_search_queries": boolean,
-    "max_search_results": boolean,
-    "max_reflection_steps": boolean,
-    "reflection_step": boolean,
+    "presence_of_interrupt": boolean,
+    "user_id_and_category_wise_storage": boolean,
+    "correct_categories": boolean,
+    "category_retrieval": boolean,
   }},
   "good_practices": {{
-    "functional_reflection": boolean,
-    "no_redundant_files": boolean,
-    "preferred_state_type": boolean,
-    "separate_prompts": boolean,
+    "functional_interrupt": boolean,
+    "llm_based_categorization": boolean,
+    "no_test_files": boolean,
   }},
   "code_quality_check": boolean,
   "code_quality_evidence": [
@@ -74,6 +72,11 @@ Task given to coding agent:
 Expert implementation (gold standard):
 {expert_code}
 
+
+Base code provided to the coding agent:
+{base_code}
+
+
 Coding agent implementation to evaluate:
 {user_code}
 
@@ -82,54 +85,55 @@ The human annotator added the following notes when running the code:
 '''
 
 USER_TASK = '''
-Create me a company researcher built using langgraph. It should be a multi-node graph. The user should be expected to provide the name of the company and the optional notes if they want. There should be a set maximum search queries that we should do per company and max search results. The LLM should generate the queries that should be searched using the Tavily API to fill the following structured object
-
-"title": "CompanyInfo", "description": "Basic information about a company", "type": "object", "properties": { "company_name": {"type": "string", "description": "Official name of the company"}, "founding_year": {"type": "integer", "description": "Year the company was founded"}, "founder_names": {"type": "array", "items": {"type": "string"}, "description": "Names of the founding team members"}, "product_description": {"type": "string", "description": "Brief description of the company's main product or service"}, "funding_summary": {"type": "string", "description": "Summary of the company's funding history”} "notable_customers": {"type": "string", "description": "Known customers that use company's product/service"}
-
-}, "required": ["company_name"] }
-
-There should be a reflection step at the end. This step should determine if we have good and sufficient information for the the company. If we don’t have sufficient information we should execute web searches again to get information on the company. There should also be a cap on the number of allowed reflection steps. Keep track of the conversation in messages array and try to do web searchers in parallel to improve speed.
+You have been provided code for a memory agent. I want to extend its functionality. Right now, it stores memories user id wise. 
+I want it to store user id and category wise. While storing a memory it should determine if a memory is personal, professional, or other. 
+It should then save based on that. While retrieving memories it should determine what category the message(s) are from. Based on that, it should only retrieve relevant memories.
+Additionaly, there should be an interrupt before saving a memory. If the user inputs accept, the memory should get saved. If the user inputs anything else, the memory should be rejected.
+Fix any other bugs/issues as well.
 '''
 
 EXPERT_CODE = '''
-File Name: configuration.py
+File Name: context.py
 
 -----------------------------
 
 File Content: 
 
-import os
-from dataclasses import dataclass, fields
-from typing import Any, Optional
+"""Define the runtime context information for the agent."""
 
-from langchain_core.runnables import RunnableConfig
+import os
+from dataclasses import dataclass, field, fields
+
+from typing_extensions import Annotated
+
+from memory_agent import prompts
 
 
 @dataclass(kw_only=True)
-class Configuration:
-    """The configurable fields for the chatbot."""
+class Context:
+    """Main context class for the memory graph system."""
 
-    max_search_queries: int = 3  # Max search queries per company
-    max_search_results: int = 3  # Max search results per query
-    max_reflection_steps: int = 0  # Max reflection steps
-    include_search_results: bool = (
-        False  # Whether to include search results in the output
+    user_id: str = "default"
+    """The ID of the user to remember in the conversation."""
+
+    model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
+        default="anthropic/claude-3-5-sonnet-20240620",
+        metadata={
+            "description": "The name of the language model to use for the agent. "
+            "Should be in the form: provider/model-name."
+        },
     )
 
-    @classmethod
-    def from_runnable_config(
-        cls, config: Optional[RunnableConfig] = None
-    ) -> "Configuration":
-        """Create a Configuration instance from a RunnableConfig."""
-        configurable = (
-            config["configurable"] if config and "configurable" in config else {{}}
-        )
-        values: dict[str, Any] = {
-            f.name: os.environ.get(f.name.upper(), configurable.get(f.name))
-            for f in fields(cls)
-            if f.init
-        }
-        return cls(**{{k: v for k, v in values.items() if v}})
+    system_prompt: str = prompts.SYSTEM_PROMPT
+
+    def __post_init__(self):
+        """Fetch env vars for attributes that were not passed as args."""
+        for f in fields(self):
+            if not f.init:
+                continue
+
+            if getattr(self, f.name) == f.default:
+                setattr(self, f.name, os.environ.get(f.name.upper(), f.default))
 
 
 
@@ -140,243 +144,125 @@ File Name: graph.py
 
 File Content: 
 
+"""Graphs that extract memories on a schedule."""
+
 import asyncio
-from typing import cast, Any, Literal
-import json
+import logging
+from datetime import datetime
+from typing import cast
 
-from tavily import AsyncTavilyClient
-from langchain_anthropic import ChatAnthropic
-from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_core.runnables import RunnableConfig
-from langgraph.graph import START, END, StateGraph
-from pydantic import BaseModel, Field
+from langchain.chat_models import init_chat_model
+from langgraph.graph import END, StateGraph
+from langgraph.runtime import Runtime
+from langgraph.store.base import BaseStore
+from langgraph.types import interrupt
 
-from agent.configuration import Configuration
-from agent.state import InputState, OutputState, OverallState
-from agent.utils import deduplicate_sources, format_sources, format_all_notes
-from agent.prompts import (
-    EXTRACTION_PROMPT,
-    REFLECTION_PROMPT,
-    INFO_PROMPT,
-    QUERY_WRITER_PROMPT,
-)
+from memory_agent import tools, utils
+from memory_agent.context import Context
+from memory_agent.state import State
 
-# LLMs
+logger = logging.getLogger(__name__)
 
-rate_limiter = InMemoryRateLimiter(
-    requests_per_second=4,
-    check_every_n_seconds=0.1,
-    max_bucket_size=10,  # Controls the maximum burst size.
-)
-claude_3_5_sonnet = ChatAnthropic(
-    model="claude-3-5-sonnet-latest", temperature=0, rate_limiter=rate_limiter
-)
-
-# Search
-
-tavily_async_client = AsyncTavilyClient()
+# Initialize the language model to be used for memory extraction
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 
 
-class Queries(BaseModel):
-    queries: list[str] = Field(
-        description="List of search queries.",
+async def call_model(state: State, runtime: Runtime[Context]) -> dict:
+    """Extract the user's state from the conversation and update the memory."""
+    user_id = runtime.context.user_id
+    model = runtime.context.model
+    system_prompt = runtime.context.system_prompt
+
+    category = await utils.get_memory_category(state.messages, llm)
+
+    # Retrieve the most recent memories for context
+    memories = await cast(BaseStore, runtime.store).asearch(
+        ("memories", user_id, category),
+        query=str([m.content for m in state.messages[-3:]]),
+        limit=10,
     )
 
-
-class ReflectionOutput(BaseModel):
-    is_satisfactory: bool = Field(
-        description="True if all required fields are well populated, False otherwise"
+    # Format memories for inclusion in the prompt
+    formatted = "\n".join(
+        f"[{mem.key}]: {{mem.value}} (similarity: {{mem.score}})" for mem in memories
     )
-    missing_fields: list[str] = Field(
-        description="List of field names that are missing or incomplete"
+    if formatted:
+        formatted = f"""
+<memories>
+{{formatted}}
+</memories>"""
+
+    # Prepare the system prompt with user memories and current time
+    # This helps the model understand the context and temporal relevance
+    sys = system_prompt.format(user_info=formatted, time=datetime.now().isoformat())
+
+    # Invoke the language model with the prepared prompt and tools
+    # "bind_tools" gives the LLM the JSON schema for all tools in the list so it knows how
+    # to use them.
+    msg = await llm.bind_tools([tools.upsert_memory]).ainvoke(
+        [{"role": "system", "content": sys}, *state.messages]
     )
-    search_queries: list[str] = Field(
-        description="If is_satisfactory is False, provide 1-3 targeted search queries to find the missing information"
-    )
-    reasoning: str = Field(description="Brief explanation of the assessment")
+    return {"messages": [msg]}
 
 
-def generate_queries(state: OverallState, config: RunnableConfig) -> dict[str, Any]:
-    """Generate search queries based on the user input and extraction schema."""
-    # Get configuration
-    configurable = Configuration.from_runnable_config(config)
-    max_search_queries = configurable.max_search_queries
+async def store_memory(state: State, runtime: Runtime[Context]):
+    # Extract tool calls from the last message
+    tool_calls = getattr(state.messages[-1], "tool_calls", [])
 
-    # Generate search queries
-    structured_llm = claude_3_5_sonnet.with_structured_output(Queries)
-
-    # Format system instructions
-    query_instructions = QUERY_WRITER_PROMPT.format(
-        company=state.company,
-        info=json.dumps(state.extraction_schema, indent=2),
-        user_notes=state.user_notes,
-        max_search_queries=max_search_queries,
-    )
-
-    # Generate queries
-    results = cast(
-        Queries,
-        structured_llm.invoke(
-            [
-                {"role": "system", "content": query_instructions},
-                {
-                    "role": "user",
-                    "content": "Please generate a list of search queries related to the schema that you want to populate.",
-                },
-            ]
-        ),
-    )
-
-    # Queries
-    query_list = [query for query in results.queries]
-    return {"search_queries": query_list}
-
-
-async def research_company(
-    state: OverallState, config: RunnableConfig
-) -> dict[str, Any]:
-    """Execute a multi-step web search and information extraction process.
-
-    This function performs the following steps:
-    1. Executes concurrent web searches using the Tavily API
-    2. Deduplicates and formats the search results
-    """
-
-    # Get configuration
-    configurable = Configuration.from_runnable_config(config)
-    max_search_results = configurable.max_search_results
-
-    # Search tasks
-    search_tasks = []
-    for query in state.search_queries:
-        search_tasks.append(
-            tavily_async_client.search(
-                query,
-                max_results=max_search_results,
-                include_raw_content=True,
-                topic="general",
+    # Concurrently execute all upsert_memory calls
+    saved_memories = await asyncio.gather(
+        *(
+            tools.upsert_memory(
+                **tc["args"],
+                user_id=runtime.context.user_id,
+                store=cast(BaseStore, runtime.store),
             )
+            for tc in tool_calls
         )
-
-    # Execute all searches concurrently
-    search_docs = await asyncio.gather(*search_tasks)
-
-    # Deduplicate and format sources
-    deduplicated_search_docs = deduplicate_sources(search_docs)
-    source_str = format_sources(
-        deduplicated_search_docs, max_tokens_per_source=1000, include_raw_content=True
     )
 
-    # Generate structured notes relevant to the extraction schema
-    p = INFO_PROMPT.format(
-        info=json.dumps(state.extraction_schema, indent=2),
-        content=source_str,
-        company=state.company,
-        user_notes=state.user_notes,
-    )
-    result = await claude_3_5_sonnet.ainvoke(p)
-    state_update = {
-        "completed_notes": [str(result.content)],
-    }
-    if configurable.include_search_results:
-        state_update["search_results"] = deduplicated_search_docs
-
-    return state_update
-
-
-def gather_notes_extract_schema(state: OverallState) -> dict[str, Any]:
-    """Gather notes from the web search and extract the schema fields."""
-
-    # Format all notes
-    notes = format_all_notes(state.completed_notes)
-
-    # Extract schema fields
-    system_prompt = EXTRACTION_PROMPT.format(
-        info=json.dumps(state.extraction_schema, indent=2), notes=notes
-    )
-    structured_llm = claude_3_5_sonnet.with_structured_output(state.extraction_schema)
-    result = structured_llm.invoke(
-        [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": "Produce a structured output from these notes.",
-            },
-        ]
-    )
-    return {"info": result}
-
-
-def reflection(state: OverallState) -> dict[str, Any]:
-    """Reflect on the extracted information and generate search queries to find missing information."""
-    structured_llm = claude_3_5_sonnet.with_structured_output(ReflectionOutput)
-
-    # Format reflection prompt
-    system_prompt = REFLECTION_PROMPT.format(
-        schema=json.dumps(state.extraction_schema, indent=2),
-        info=state.info,
-    )
-
-    # Invoke
-    result = cast(
-        ReflectionOutput,
-        structured_llm.invoke(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Produce a structured reflection output."},
-            ]
-        ),
-    )
-
-    if result.is_satisfactory:
-        return {"is_satisfactory": result.is_satisfactory}
-    else:
-        return {
-            "is_satisfactory": result.is_satisfactory,
-            "search_queries": result.search_queries,
-            "reflection_steps_taken": state.reflection_steps_taken + 1,
+    # Format the results of memory storage operations
+    # This provides confirmation to the model that the actions it took were completed
+    results = [
+        {
+            "role": "tool",
+            "content": mem,
+            "tool_call_id": tc["id"],
         }
+        for tc, mem in zip(tool_calls, saved_memories)
+    ]
+    return {"messages": results}
 
 
-def route_from_reflection(
-    state: OverallState, config: RunnableConfig
-) -> Literal[END, "research_company"]:  # type: ignore
-    """Route the graph based on the reflection output."""
-    # Get configuration
-    configurable = Configuration.from_runnable_config(config)
-
-    # If we have satisfactory results, end the process
-    if state.is_satisfactory:
-        return END
-
-    # If results aren't satisfactory but we haven't hit max steps, continue research
-    if state.reflection_steps_taken <= configurable.max_reflection_steps:
-        return "research_company"
-
-    # If we've exceeded max steps, end even if not satisfactory
+def route_message(state: State):
+    """Determine the next step based on the presence of tool calls."""
+    msg = state.messages[-1]
+    if getattr(msg, "tool_calls", None):
+        # If there are tool calls, we need to store memories
+        return "store_memory"
+    # Otherwise, finish; user can send the next message
     return END
 
 
-# Add nodes and edges
-builder = StateGraph(
-    OverallState,
-    input=InputState,
-    output=OutputState,
-    config_schema=Configuration,
-)
-builder.add_node("gather_notes_extract_schema", gather_notes_extract_schema)
-builder.add_node("generate_queries", generate_queries)
-builder.add_node("research_company", research_company)
-builder.add_node("reflection", reflection)
+# Create the graph + all nodes
+builder = StateGraph(State, context_schema=Context)
 
-builder.add_edge(START, "generate_queries")
-builder.add_edge("generate_queries", "research_company")
-builder.add_edge("research_company", "gather_notes_extract_schema")
-builder.add_edge("gather_notes_extract_schema", "reflection")
-builder.add_conditional_edges("reflection", route_from_reflection)
-
-# Compile
+# Define the flow of the memory extraction process
+builder.add_node(call_model)
+builder.add_edge("__start__", "call_model")
+builder.add_node(store_memory)
+builder.add_conditional_edges("call_model", route_message, ["store_memory", END])
+# Right now, we're returning control to the user after storing a memory
+# Depending on the model, you may want to route back to the model
+# to let it first store memories, then generate a response
+builder.add_edge("store_memory", "call_model")
 graph = builder.compile()
+graph.name = "MemoryAgent"
+
+app = graph
+
+
+__all__ = ["graph"]
 
 
 
@@ -387,89 +273,28 @@ File Name: prompts.py
 
 File Content: 
 
-EXTRACTION_PROMPT = """Your task is to take notes gathered from web research and extract them into the following schema.
+"""Define default prompts."""
 
-<schema>
-{{info}}
-</schema>
+SYSTEM_PROMPT = """You are a helpful and friendly chatbot. Get to know the user! \
+Ask questions! Be spontaneous! 
+{{user_info}}
 
-Here are all the notes from research:
+System Time: {{time}}"""
 
-<web_research_notes>
-{{notes}}
-</web_research_notes>
+
+CATEGORY_PROMPT = """
+Based on these recent messages: {{messages}}
+    
+Which memory categories are relevant? Choose from: personal, professional, other
+    
+    Respond with only the category name.
+    Examples:
+    - "professional" (for work discussions)
+    - "personal" (for personal topics)  
+    - "other" (for other topics)
+
+Your response should always be one word from personal, professional, or other. 
 """
-
-QUERY_WRITER_PROMPT = """You are a search query generator tasked with creating targeted search queries to gather specific company information.
-
-Here is the company you are researching: {{company}}
-
-Generate at most {{max_search_queries}} search queries that will help gather the following information:
-
-<schema>
-{{info}}
-</schema>
-
-<user_notes>
-{{user_notes}}
-</user_notes>
-
-Your query should:
-1. Focus on finding factual, up-to-date company information
-2. Target official sources, news, and reliable business databases
-3. Prioritize finding information that matches the schema requirements
-4. Include the company name and relevant business terms
-5. Be specific enough to avoid irrelevant results
-
-Create a focused query that will maximize the chances of finding schema-relevant information."""
-
-INFO_PROMPT = """You are doing web research on a company, {{company}}. 
-
-The following schema shows the type of information we're interested in:
-
-<schema>
-{{info}}
-</schema>
-
-You have just scraped website content. Your task is to take clear, organized notes about the company, focusing on topics relevant to our interests.
-
-<Website contents>
-{{content}}
-</Website contents>
-
-Here are any additional notes from the user:
-<user_notes>
-{{user_notes}}
-</user_notes>
-
-Please provide detailed research notes that:
-1. Are well-organized and easy to read
-2. Focus on topics mentioned in the schema
-3. Include specific facts, dates, and figures when available
-4. Maintain accuracy of the original content
-5. Note when important information appears to be missing or unclear
-
-Remember: Don't try to format the output to match the schema - just take clear notes that capture all relevant information."""
-
-REFLECTION_PROMPT = """You are a research analyst tasked with reviewing the quality and completeness of extracted company information.
-
-Compare the extracted information with the required schema:
-
-<Schema>
-{{schema}}
-</Schema>
-
-Here is the extracted information:
-<extracted_info>
-{{info}}
-</extracted_info>
-
-Analyze if all required fields are present and sufficiently populated. Consider:
-1. Are any required fields missing?
-2. Are any fields incomplete or containing uncertain information?
-3. Are there fields with placeholder values or "unknown" markers?
-"""
-
 
 
 
@@ -479,113 +304,89 @@ File Name: state.py
 
 File Content: 
 
-from dataclasses import dataclass, field
-from typing import Any, Optional, Annotated
-import operator
+"""Define the shared values."""
 
+from __future__ import annotations
 
-DEFAULT_EXTRACTION_SCHEMA = {
-    "title": "CompanyInfo",
-    "description": "Basic information about a company",
-    "type": "object",
-    "properties": {
-        "company_name": {
-            "type": "string",
-            "description": "Official name of the company",
-        },
-        "founding_year": {
-            "type": "integer",
-            "description": "Year the company was founded",
-        },
-        "founder_names": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Names of the founding team members",
-        },
-        "product_description": {
-            "type": "string",
-            "description": "Brief description of the company's main product or service",
-        },
-        "funding_summary": {
-            "type": "string",
-            "description": "Summary of the company's funding history",
-        },
-    },
-    "required": ["company_name"],
-}
+from dataclasses import dataclass
+
+from langchain_core.messages import AnyMessage
+from langgraph.graph import add_messages
+from typing_extensions import Annotated
 
 
 @dataclass(kw_only=True)
-class InputState:
-    """Input state defines the interface between the graph and the user (external API)."""
+class State:
+    """Main graph state."""
 
-    company: str
-    "Company to research provided by the user."
+    messages: Annotated[list[AnyMessage], add_messages]
+    """The messages in the conversation."""
 
-    extraction_schema: dict[str, Any] = field(
-        default_factory=lambda: DEFAULT_EXTRACTION_SCHEMA
+
+__all__ = [
+    "State",
+]
+
+
+
+
+File Name: tools.py
+
+-----------------------------
+
+File Content: 
+
+"""Define he agent's tools."""
+
+import uuid
+from typing import Annotated, Literal, Optional
+
+from langchain_core.tools import InjectedToolArg
+from langgraph.store.base import BaseStore
+from langgraph.types import interrupt
+
+
+async def upsert_memory(
+    content: str,
+    context: str,
+    category: Literal["personal", "professional", "other"],
+    *,
+    memory_id: Optional[uuid.UUID] = None,
+    # Hide these arguments from the model.
+    user_id: Annotated[str, InjectedToolArg],
+    store: Annotated[BaseStore, InjectedToolArg],
+):
+    """Upsert a memory in the database.
+
+    If a memory conflicts with an existing one, then just UPDATE the
+    existing one by passing in memory_id - don't create two memories
+    that are the same. If the user corrects a memory, UPDATE it.
+
+    Args:
+        content: The main content of the memory. For example:
+            "User expressed interest in learning about French."
+        context: Additional context for the memory. For example:
+            "This was mentioned while discussing career options in Europe."
+        category: The category the memory belongs to. Options are:
+            - personal -> personal preferences, hobbies, relationships, interests, etc.
+            - professional -> work related information, skills, achievements, etc.
+            - other -> memories that don't fit into the personal or professional categories.
+        memory_id: ONLY PROVIDE IF UPDATING AN EXISTING MEMORY.
+        The memory to overwrite.
+    """
+    response = interrupt(f"Saving the following memory: {{content}} in the category: {{category}}. Please reply with 'accept' or 'reject'")
+    if response == "accept":
+        pass
+    else:
+        return f"Rejected memory: {{content}} in the category: {{category}}"
+
+    mem_id = memory_id or uuid.uuid4()
+    await store.aput(
+        ("memories", user_id, category),
+        key=str(mem_id),
+        value={"content": content, "context": context},
     )
-    "The json schema defines the information the agent is tasked with filling out."
-
-    user_notes: Optional[dict[str, Any]] = field(default=None)
-    "Any notes from the user to start the research process."
-
-
-@dataclass(kw_only=True)
-class OverallState:
-    """Input state defines the interface between the graph and the user (external API)."""
-
-    company: str
-    "Company to research provided by the user."
-
-    extraction_schema: dict[str, Any] = field(
-        default_factory=lambda: DEFAULT_EXTRACTION_SCHEMA
-    )
-    "The json schema defines the information the agent is tasked with filling out."
-
-    user_notes: str = field(default=None)
-    "Any notes from the user to start the research process."
-
-    search_queries: list[str] = field(default=None)
-    "List of generated search queries to find relevant information"
-
-    search_results: list[dict] = field(default=None)
-    "List of search results"
-
-    completed_notes: Annotated[list, operator.add] = field(default_factory=list)
-    "Notes from completed research related to the schema"
-
-    info: dict[str, Any] = field(default=None)
-    """
-    A dictionary containing the extracted and processed information
-    based on the user's query and the graph's execution.
-    This is the primary output of the enrichment process.
-    """
-
-    is_satisfactory: bool = field(default=None)
-    "True if all required fields are well populated, False otherwise"
-
-    reflection_steps_taken: int = field(default=0)
-    "Number of times the reflection node has been executed"
-
-
-@dataclass(kw_only=True)
-class OutputState:
-    """The response object for the end user.
-
-    This class defines the structure of the output that will be provided
-    to the user after the graph's execution is complete.
-    """
-
-    info: dict[str, Any]
-    """
-    A dictionary containing the extracted and processed information
-    based on the user's query and the graph's execution.
-    This is the primary output of the enrichment process.
-    """
-
-    search_results: list[dict] = field(default=None)
-    "List of search results"
+    return f"Stored memory {mem_id}"
 
 
 
@@ -596,97 +397,327 @@ File Name: utils.py
 
 File Content: 
 
-def deduplicate_sources(search_response: dict | list[dict]) -> list[dict]:
-    """
-    Takes either a single search response or list of responses from Tavily API and de-duplicates them based on the URL.
+"""Utility functions used in our graph."""
 
-    Args:
-        search_response: Either:
-            - A dict with a 'results' key containing a list of search results
-            - A list of dicts, each containing search results
+from langchain_core.messages import HumanMessage
+from typing import Literal
+from .prompts import CATEGORY_PROMPT
 
-    Returns:
-        str: Formatted string with deduplicated sources
-    """
-    # Convert input to list of results
-    if isinstance(search_response, dict):
-        sources_list = search_response["results"]
-    elif isinstance(search_response, list):
-        sources_list = []
-        for response in search_response:
-            if isinstance(response, dict) and "results" in response:
-                sources_list.extend(response["results"])
-            else:
-                sources_list.extend(response)
+
+def split_model_and_provider(fully_specified_name: str) -> dict:
+    """Initialize the configured chat model."""
+    if "/" in fully_specified_name:
+        provider, model = fully_specified_name.split("/", maxsplit=1)
     else:
-        raise ValueError(
-            "Input must be either a dict with 'results' or a list of search results"
+        provider = None
+        model = fully_specified_name
+    return {"model": model, "provider": provider}
+
+
+async def get_memory_category(messages, llm) -> Literal["personal", "professional", "other"]:
+    """Get the category of the memory based on the messages."""
+
+    try:
+        recent_messages = [m.content for m in messages[-3:]]
+
+        category_prompt = CATEGORY_PROMPT.format(messages=recent_messages)
+
+        response = await llm.ainvoke([HumanMessage(content=category_prompt)])
+
+        category = response.content.strip()
+
+        if category not in ["personal", "professional", "other"]:
+            return "personal"
+    except Exception as e:
+        return "personal"
+
+    return category
+'''
+
+BASE_CODE = '''
+File Name: context.py
+
+-----------------------------
+
+File Content: 
+
+"""Define the runtime context information for the agent."""
+
+import os
+from dataclasses import dataclass, field, fields
+
+from typing_extensions import Annotated
+
+from memory_agent import prompts
+
+
+@dataclass(kw_only=True)
+class Context:
+    """Main context class for the memory graph system."""
+
+    user_id: str = "default"
+    """The ID of the user to remember in the conversation."""
+
+    model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
+        default="anthropic/claude-3-5-sonnet-20240620",
+        metadata={
+            "description": "The name of the language model to use for the agent. "
+            "Should be in the form: provider/model-name."
+        },
+    )
+
+    system_prompt: str = prompts.SYSTEM_PROMPT
+
+    def __post_init__(self):
+        """Fetch env vars for attributes that were not passed as args."""
+        for f in fields(self):
+            if not f.init:
+                continue
+
+            if getattr(self, f.name) == f.default:
+                setattr(self, f.name, os.environ.get(f.name.upper(), f.default))
+
+
+
+
+File Name: graph.py
+
+-----------------------------
+
+File Content: 
+
+"""Graphs that extract memories on a schedule."""
+
+import asyncio
+import logging
+from datetime import datetime
+from typing import cast
+
+from langchain.chat_models import init_chat_model
+from langgraph.graph import END, StateGraph
+from langgraph.runtime import Runtime
+from langgraph.store.base import BaseStore
+
+from memory_agent import tools, utils
+from memory_agent.context import Context
+from memory_agent.state import State
+
+logger = logging.getLogger(__name__)
+
+# Initialize the language model to be used for memory extraction
+llm = init_chat_model()
+
+
+async def call_model(state: State, runtime: Runtime[Context]) -> dict:
+    """Extract the user's state from the conversation and update the memory."""
+    user_id = runtime.context.user_id
+    model = runtime.context.model
+    system_prompt = runtime.context.system_prompt
+
+    # Retrieve the most recent memories for context
+    memories = await cast(BaseStore, runtime.store).asearch(
+        ("memories", user_id),
+        query=str([m.content for m in state.messages[-3:]]),
+        limit=10,
+    )
+
+    # Format memories for inclusion in the prompt
+    formatted = "\n".join(
+        f"[{mem.key}]: {{mem.value}} (similarity: {{mem.score}})" for mem in memories
+    )
+    if formatted:
+        formatted = f"""
+<memories>
+{{formatted}}
+</memories>"""
+
+    # Prepare the system prompt with user memories and current time
+    # This helps the model understand the context and temporal relevance
+    sys = system_prompt.format(user_info=formatted, time=datetime.now().isoformat())
+
+    # Invoke the language model with the prepared prompt and tools
+    # "bind_tools" gives the LLM the JSON schema for all tools in the list so it knows how
+    # to use them.
+    msg = await llm.bind_tools([tools.upsert_memory]).ainvoke(
+        [{"role": "system", "content": sys}, *state.messages],
+        context=utils.split_model_and_provider(model),
+    )
+    return {"messages": [msg]}
+
+
+async def store_memory(state: State, runtime: Runtime[Context]):
+    # Extract tool calls from the last message
+    tool_calls = getattr(state.messages[-1], "tool_calls", [])
+
+    # Concurrently execute all upsert_memory calls
+    saved_memories = await asyncio.gather(
+        *(
+            tools.upsert_memory(
+                **tc["args"],
+                user_id=runtime.context.user_id,
+                store=cast(BaseStore, runtime.store),
+            )
+            for tc in tool_calls
         )
+    )
 
-    # Deduplicate by URL
-    unique_urls = set()
-    unique_sources_list = []
-    for source in sources_list:
-        if source["url"] not in unique_urls:
-            unique_urls.add(source["url"])
-            unique_sources_list.append(source)
+    # Format the results of memory storage operations
+    # This provides confirmation to the model that the actions it took were completed
+    results = [
+        {
+            "role": "tool",
+            "content": mem,
+            "tool_call_id": tc["id"],
+        }
+        for tc, mem in zip(tool_calls, saved_memories)
+    ]
+    return {"messages": results}
 
-    return unique_sources_list
+
+def route_message(state: State):
+    """Determine the next step based on the presence of tool calls."""
+    msg = state.messages[-1]
+    if getattr(msg, "tool_calls", None):
+        # If there are tool calls, we need to store memories
+        return "store_memory"
+    # Otherwise, finish; user can send the next message
+    return END
 
 
-def format_sources(
-    sources_list: list[dict],
-    include_raw_content: bool = True,
-    max_tokens_per_source: int = 1000,
-) -> str:
-    """
-    Takes a list of unique results from Tavily API and formats them.
-    Limits the raw_content to approximately max_tokens_per_source.
-    include_raw_content specifies whether to include the raw_content from Tavily in the formatted string.
+# Create the graph + all nodes
+builder = StateGraph(State, context_schema=Context)
+
+# Define the flow of the memory extraction process
+builder.add_node(call_model)
+builder.add_edge("__start__", "call_model")
+builder.add_node(store_memory)
+builder.add_conditional_edges("call_model", route_message, ["store_memory", END])
+# Right now, we're returning control to the user after storing a memory
+# Depending on the model, you may want to route back to the model
+# to let it first store memories, then generate a response
+builder.add_edge("store_memory", "call_model")
+graph = builder.compile()
+graph.name = "MemoryAgent"
+
+
+__all__ = ["graph"]
+
+
+
+
+File Name: prompts.py
+
+-----------------------------
+
+File Content: 
+
+"""Define default prompts."""
+
+SYSTEM_PROMPT = """You are a helpful and friendly chatbot. Get to know the user! \
+Ask questions! Be spontaneous! 
+{{user_info}}
+
+System Time: {{time}}"""
+
+
+
+
+File Name: state.py
+
+-----------------------------
+
+File Content: 
+
+"""Define the shared values."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from langchain_core.messages import AnyMessage
+from langgraph.graph import add_messages
+from typing_extensions import Annotated
+
+
+@dataclass(kw_only=True)
+class State:
+    """Main graph state."""
+
+    messages: Annotated[list[AnyMessage], add_messages]
+    """The messages in the conversation."""
+
+
+__all__ = [
+    "State",
+]
+
+
+
+
+File Name: tools.py
+
+-----------------------------
+
+File Content: 
+
+"""Define he agent's tools."""
+
+import uuid
+from typing import Annotated, Optional
+
+from langchain_core.tools import InjectedToolArg
+from langgraph.store.base import BaseStore
+
+
+async def upsert_memory(
+    content: str,
+    context: str,
+    *,
+    memory_id: Optional[uuid.UUID] = None,
+    # Hide these arguments from the model.
+    user_id: Annotated[str, InjectedToolArg],
+    store: Annotated[BaseStore, InjectedToolArg],
+):
+    """Upsert a memory in the database.
+
+    If a memory conflicts with an existing one, then just UPDATE the
+    existing one by passing in memory_id - don't create two memories
+    that are the same. If the user corrects a memory, UPDATE it.
 
     Args:
-        sources_list: list of unique results from Tavily API
-        max_tokens_per_source: int, maximum number of tokens per each search result to include in the formatted string
-        include_raw_content: bool, whether to include the raw_content from Tavily in the formatted string
-
-    Returns:
-        str: Formatted string with deduplicated sources
+        content: The main content of the memory. For example:
+            "User expressed interest in learning about French."
+        context: Additional context for the memory. For example:
+            "This was mentioned while discussing career options in Europe."
+        memory_id: ONLY PROVIDE IF UPDATING AN EXISTING MEMORY.
+        The memory to overwrite.
     """
-    # Format output
-    formatted_text = "Sources:\n\n"
-    for source in sources_list:
-        formatted_text += f"Source {source['title']}:\n===\n"
-        formatted_text += f"URL: {source['url']}\n===\n"
-        formatted_text += (
-            f"Most relevant content from source: {source['content']}\n===\n"
-        )
-        if include_raw_content:
-            # Using rough estimate of 4 characters per token
-            char_limit = max_tokens_per_source * 4
-            # Handle None raw_content
-            raw_content = source.get("raw_content", "")
-            if raw_content is None:
-                raw_content = ""
-                print(f"Warning: No raw_content found for source {source['url']}")
-            if len(raw_content) > char_limit:
-                raw_content = raw_content[:char_limit] + "... [truncated]"
-            formatted_text += f"Full source content limited to {{max_tokens_per_source}} tokens: {{raw_content}}\n\n"
-
-    return formatted_text.strip()
-
-
-def format_all_notes(completed_notes: list[str]) -> str:
-    """Format a list of notes into a string"""
-    formatted_str = ""
-    for idx, company_notes in enumerate(completed_notes, 1):
-        formatted_str += f"""
-{'='*60}
-Note: {idx}:
-{'='*60}
-Notes from research:
-{company_notes}"""
-    return formatted_str
+    mem_id = memory_id or uuid.uuid4()
+    await store.aput(
+        ("memories", user_id),
+        key=str(mem_id),
+        value={"content": content, "context": context},
+    )
+    return f"Stored memory {mem_id}"
 
 
 
+
+File Name: utils.py
+
+-----------------------------
+
+File Content: 
+
+"""Utility functions used in our graph."""
+
+
+def split_model_and_provider(fully_specified_name: str) -> dict:
+    """Initialize the configured chat model."""
+    if "/" in fully_specified_name:
+        provider, model = fully_specified_name.split("/", maxsplit=1)
+    else:
+        provider = None
+        model = fully_specified_name
+    return {"model": model, "provider": provider}
 '''
