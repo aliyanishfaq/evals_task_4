@@ -1,1 +1,0 @@
-[Item(namespace=['memories', 'test-user', 'professional'], key='893a610a-f6c4-4521-bcdd-eb612bb0b788', value={'content': 'User works as a data scientist at Google and loves their job.', 'context': 'Shared during initial conversation about professional life.'}, created_at='2025-09-04T23:52:27.995877+00:00', updated_at='2025-09-04T23:52:27.995878+00:00', score=None)]

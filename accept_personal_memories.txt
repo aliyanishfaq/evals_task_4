@@ -1,1 +1,0 @@
-[Item(namespace=['memories', 'test-user-accept-2'], key='d9dbfdeb-fd2a-442c-b657-fb29cf614508', value={'content': "User's favorite hobby is playing guitar and practices every evening.", 'context': 'Shared personal information about musical hobbies and practice habits.'}, created_at='2025-09-05T00:20:24.346865+00:00', updated_at='2025-09-05T00:20:24.346867+00:00', score=None)]

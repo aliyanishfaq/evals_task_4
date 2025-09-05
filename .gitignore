@@ -1,0 +1,15 @@
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+.tox/
+.cache/
+.mypy_cache/
+
+# Text dump files
+txt_dump/
+
+# Results files
+results/
