@@ -104,13 +104,15 @@ async def test_memory_storage_with_correct_user_and_category():
                     context=Context(user_id=user_id_accept_1),
                 )
             
-            with open("accept_professional_post_interrupt.txt", "w") as f:
+            os.makedirs("txt_dump", exist_ok=True)
+            with open("txt_dump/accept_professional_post_interrupt.txt", "w") as f:
                 f.write(str(res))
         
         # Check that memory was stored in professional category
         namespace = ("memories", user_id_accept_1, expected_category_1)
         memories = mem_store.search(namespace)
-        with open("accept_professional_memories.txt", "w") as f:
+        os.makedirs("txt_dump", exist_ok=True)
+        with open("txt_dump/accept_professional_memories.txt", "w") as f:
             f.write(str(memories))
             
         if len(memories) > 0:
@@ -118,7 +120,7 @@ async def test_memory_storage_with_correct_user_and_category():
         else:
             namespace = ("memories", user_id_accept_1)
             memories = mem_store.search(namespace)
-            with open("accept_professional_memories.txt", "w") as f:
+            with open("txt_dump/accept_professional_memories.txt", "w") as f:
                 f.write(str(memories))
             if len(memories) > 0:
                 _add(score, 1, "memory_stored_professional", True, f"Memory found but in wrong category(ies): {len(memories)} items found (expected: {expected_category_1})")
@@ -151,13 +153,13 @@ async def test_memory_storage_with_correct_user_and_category():
                     context=Context(user_id=user_id_accept_2),
                 )
             
-            with open("accept_personal_post_interrupt.txt", "w") as f:
+            with open("txt_dump/accept_personal_post_interrupt.txt", "w") as f:
                 f.write(str(res))
             
         # Check that memory was stored in personal category
         namespace = ("memories", user_id_accept_2, expected_category_2)
         memories = mem_store.search(namespace)
-        with open("accept_personal_memories.txt", "w") as f:
+        with open("txt_dump/accept_personal_memories.txt", "w") as f:
             f.write(str(memories))
             
         if len(memories) > 0:
@@ -165,7 +167,7 @@ async def test_memory_storage_with_correct_user_and_category():
         else:
             namespace = ("memories", user_id_accept_2)
             memories = mem_store.search(namespace)
-            with open("accept_personal_memories.txt", "w") as f:
+            with open("txt_dump/accept_personal_memories.txt", "w") as f:
                 f.write(str(memories))
             if len(memories) > 0:
                 _add(score, 1, "memory_stored_personal", True, f"Memory found but in wrong category(ies): {len(memories)} items found (expected: {expected_category_2})")
@@ -198,13 +200,13 @@ async def test_memory_storage_with_correct_user_and_category():
                     context=Context(user_id=user_id_reject),
                 )
             
-            with open("reject_test_post_interrupt.txt", "w") as f:
+            with open("txt_dump/reject_test_post_interrupt.txt", "w") as f:
                 f.write(str(res))
             
         # Check that NO memory was stored when rejected
         namespace = ("memories", user_id_reject)
         memories = mem_store.search(namespace)
-        with open("reject_test_memories.txt", "w") as f:
+        with open("txt_dump/reject_test_memories.txt", "w") as f:
             f.write(str(memories))
             
         if len(memories) == 0:
