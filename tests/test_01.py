@@ -52,7 +52,7 @@ def _add(score, pts, key, ok, msg=""):
 @pytest.mark.asyncio
 async def test_memory_storage_with_correct_user_and_category():
     """Test that memories are stored with the correct user and category, and NOT stored when rejected."""
-    score = {"candidate": CANDIDATE_NAME, "bucket": "memory_category", "points": 0, "max_points": 9, "details": []}
+    score = {"candidate": CANDIDATE_NAME, "bucket": "memory_category", "points": 0, "max_points": 11, "details": []}
     failures = []
     try:
         # Determine which source directory to use based on the agent filename

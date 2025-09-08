@@ -1,0 +1,62 @@
+{
+  "candidate": "main",
+  "bucket": "code_quality",
+  "points": 21,
+  "max_points": 21,
+  "details": [
+    {
+      "key": "code_quality_check",
+      "points": 4,
+      "passed": true,
+      "msg": "[]"
+    },
+    {
+      "key": "code_correctness_check",
+      "points": 8,
+      "passed": true,
+      "msg": "[]"
+    },
+    {
+      "key": "presence_of_interrupt",
+      "points": 1,
+      "passed": true,
+      "msg": "Presence of interrupt is present"
+    },
+    {
+      "key": "user_id_and_category_wise_storage",
+      "points": 1,
+      "passed": true,
+      "msg": "User id and category wise storage is present"
+    },
+    {
+      "key": "correct_categories",
+      "points": 1,
+      "passed": true,
+      "msg": "Correct categories is present"
+    },
+    {
+      "key": "category_retrieval",
+      "points": 1,
+      "passed": true,
+      "msg": "Category retrieval is present"
+    },
+    {
+      "key": "functional_interrupt",
+      "points": 2,
+      "passed": true,
+      "msg": "Functional interrupt is present"
+    },
+    {
+      "key": "llm_based_categorization",
+      "points": 2,
+      "passed": true,
+      "msg": "LLM based categorization is present"
+    },
+    {
+      "key": "no_test_files",
+      "points": 1,
+      "passed": true,
+      "msg": "No test files is present"
+    }
+  ]
+}

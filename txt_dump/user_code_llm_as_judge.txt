@@ -1,0 +1,485 @@
+File Name: context.py
+
+-----------------------------
+
+File Content: 
+
+"""Define the runtime context information for the agent."""
+
+import os
+from dataclasses import dataclass, field, fields
+
+from typing_extensions import Annotated
+
+from memory_agent import prompts
+
+
+@dataclass(kw_only=True)
+class Context:
+    """Main context class for the memory graph system."""
+
+    user_id: str = "default"
+    """The ID of the user to remember in the conversation."""
+
+    model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
+        default="anthropic/claude-3-5-sonnet-20240620",
+        metadata={
+            "description": "The name of the language model to use for the agent. "
+            "Should be in the form: provider/model-name."
+        },
+    )
+
+    system_prompt: str = prompts.SYSTEM_PROMPT
+
+    def __post_init__(self):
+        """Fetch env vars for attributes that were not passed as args."""
+        for f in fields(self):
+            if not f.init:
+                continue
+
+            if getattr(self, f.name) == f.default:
+                setattr(self, f.name, os.environ.get(f.name.upper(), f.default))
+
+
+
+
+File Name: graph.py
+
+-----------------------------
+
+File Content: 
+
+"""Graphs that extract memories on a schedule."""
+
+import asyncio
+import logging
+from datetime import datetime
+from typing import cast
+
+from langchain.chat_models import init_chat_model
+from langgraph.graph import END, StateGraph
+from langgraph.runtime import Runtime
+from langgraph.store.base import BaseStore
+
+from memory_agent import tools, utils
+from memory_agent.context import Context
+from memory_agent.state import State
+
+logger = logging.getLogger(__name__)
+
+# Initialize the language model to be used for memory extraction
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+
+
+async def call_model(state: State, runtime: Runtime[Context]) -> dict:
+    """Extract the user's state from the conversation and update the memory."""
+    user_id = runtime.context.user_id
+    model = runtime.context.model
+    system_prompt = runtime.context.system_prompt
+
+    # Retrieve relevant memories based on category filtering
+    memories = await tools.get_relevant_memories(
+        messages=state.messages,
+        user_id=user_id,
+        store=cast(BaseStore, runtime.store),
+        limit=10,
+    )
+
+    # Format memories for inclusion in the prompt
+    formatted = "\n".join(
+        f"[{mem.key}]: {mem.value} (similarity: {mem.score})" for mem in memories
+    )
+    if formatted:
+        formatted = f"""
+<memories>
+{formatted}
+</memories>"""
+
+    # Prepare the system prompt with user memories and current time
+    # This helps the model understand the context and temporal relevance
+    sys = system_prompt.format(user_info=formatted, time=datetime.now().isoformat())
+
+    # Invoke the language model with the prepared prompt and tools
+    # "bind_tools" gives the LLM the JSON schema for all tools in the list so it knows how
+    # to use them.
+    msg = await llm.bind_tools([tools.upsert_memory]).ainvoke(
+        [{"role": "system", "content": sys}, *state.messages],
+    )
+    return {"messages": [msg]}
+
+
+async def request_confirmation(state: State, runtime: Runtime[Context]):
+    """Request user confirmation before saving memories."""
+    # Extract tool calls from the last message
+    tool_calls = getattr(state.messages[-1], "tool_calls", [])
+    
+    if not tool_calls:
+        return {}
+    
+    # Format pending memories for user review
+    memory_summaries = []
+    for tc in tool_calls:
+        args = tc["args"]
+        content = args.get("content", "")
+        context = args.get("context", "")
+        # Classify category for display
+        category = await tools.classify_memory_category(content, context)
+        memory_summaries.append(f"- [{category.value.upper()}] {content} (Context: {context})")
+    
+    confirmation_message = f"""I want to save the following memories:
+
+{chr(10).join(memory_summaries)}
+
+Please type 'accept' to save these memories, or anything else to reject them."""
+    
+    return {
+        "messages": [{"role": "assistant", "content": confirmation_message}],
+        "pending_memories": tool_calls
+    }
+
+
+def route_message(state: State):
+    """Determine the next step based on the presence of tool calls and pending memories."""
+    # Check if we have pending memories and user response
+    if (hasattr(state, 'pending_memories') and state.pending_memories and 
+        state.messages and hasattr(state.messages[-1], 'role') and 
+        getattr(state.messages[-1], 'role') == 'human'):
+        
+        # User has responded to confirmation request
+        user_response = getattr(state.messages[-1], 'content', '').strip().lower()
+        
+        if user_response == "accept":
+            return "store_accepted_memories"
+        else:
+            return "reject_memories"
+    
+    # Check for new tool calls that need confirmation
+    msg = state.messages[-1]
+    if getattr(msg, "tool_calls", None):
+        return "request_confirmation"
+        
+    # Otherwise, finish; user can send the next message
+    return END
+
+
+async def store_accepted_memories(state: State, runtime: Runtime[Context]):
+    """Store memories that user has accepted."""
+    if not state.pending_memories:
+        return {"messages": [{"role": "assistant", "content": "No memories to save."}]}
+    
+    # Execute all upsert_memory calls for confirmed memories
+    saved_memories = await asyncio.gather(
+        *(
+            tools.upsert_memory(
+                **tc["args"],
+                user_id=runtime.context.user_id,
+                store=cast(BaseStore, runtime.store),
+            )
+            for tc in state.pending_memories
+        )
+    )
+
+    # Format the results of memory storage operations
+    results = [
+        {
+            "role": "tool",
+            "content": mem,
+            "tool_call_id": tc["id"],
+        }
+        for tc, mem in zip(state.pending_memories, saved_memories)
+    ]
+    
+    confirmation_msg = {"role": "assistant", "content": "Memories have been saved successfully!"}
+    return {"messages": results + [confirmation_msg], "pending_memories": None}
+
+
+async def reject_memories(state: State, runtime: Runtime[Context]):
+    """Handle rejection of memories."""
+    rejection_msg = {"role": "assistant", "content": "Memories were not saved as requested."}
+    return {"messages": [rejection_msg], "pending_memories": None}
+
+
+# Create the graph + all nodes
+builder = StateGraph(State, context_schema=Context)
+
+# Define the flow of the memory extraction process
+builder.add_node(call_model)
+builder.add_edge("__start__", "call_model")
+
+# Add nodes for memory confirmation workflow
+builder.add_node(request_confirmation)
+builder.add_node(store_accepted_memories)
+builder.add_node(reject_memories)
+
+# Route from call_model based on tool calls and user responses
+builder.add_conditional_edges(
+    "call_model", 
+    route_message, 
+    ["request_confirmation", "store_accepted_memories", "reject_memories", END]
+)
+
+# After requesting confirmation, wait for user response (return to user)
+builder.add_edge("request_confirmation", END)
+
+# After storing or rejecting memories, go back to call_model
+builder.add_edge("store_accepted_memories", "call_model")
+builder.add_edge("reject_memories", "call_model")
+
+graph = builder.compile()
+graph.name = "MemoryAgent"
+
+app = graph
+
+
+__all__ = ["graph"]
+
+
+
+
+File Name: prompts.py
+
+-----------------------------
+
+File Content: 
+
+"""Define default prompts."""
+
+SYSTEM_PROMPT = """You are a helpful and friendly chatbot. Get to know the user! \
+Ask questions! Be spontaneous! 
+{user_info}
+
+System Time: {time}"""
+
+
+
+
+File Name: state.py
+
+-----------------------------
+
+File Content: 
+
+"""Define the shared values."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from langchain_core.messages import AnyMessage
+from langgraph.graph import add_messages
+from typing_extensions import Annotated
+
+
+@dataclass(kw_only=True)
+class State:
+    """Main graph state."""
+
+    messages: Annotated[list[AnyMessage], add_messages]
+    """The messages in the conversation."""
+    
+    pending_memories: list = None
+    """Memories awaiting user confirmation."""
+    
+    user_confirmation: str = None
+    """User's confirmation response for pending memories."""
+
+
+__all__ = [
+    "State",
+]
+
+
+
+
+File Name: tools.py
+
+-----------------------------
+
+File Content: 
+
+"""Define he agent's tools."""
+
+import uuid
+from typing import Annotated, Optional
+from enum import Enum
+
+from langchain_core.tools import InjectedToolArg
+from langgraph.store.base import BaseStore
+
+
+class MemoryCategory(Enum):
+    """Categories for organizing memories."""
+    PERSONAL = "personal"
+    PROFESSIONAL = "professional"
+    OTHER = "other"
+
+
+async def classify_memory_category(content: str, context: str) -> MemoryCategory:
+    """Classify a memory into personal, professional, or other categories.
+    
+    Args:
+        content: The main content of the memory
+        context: Additional context for the memory
+        
+    Returns:
+        MemoryCategory: The classified category
+    """
+    # Combine content and context for classification
+    full_text = f"{content} {context}".lower()
+    
+    # Professional keywords
+    professional_keywords = [
+        "work", "job", "career", "office", "business", "meeting", "project",
+        "colleague", "manager", "client", "company", "salary", "promotion",
+        "interview", "resume", "deadline", "conference", "professional",
+        "industry", "corporate", "enterprise", "startup", "team", "boss",
+        "employee", "workplace", "coworker"
+    ]
+    
+    # Personal keywords
+    personal_keywords = [
+        "family", "friend", "relationship", "hobby", "vacation", "birthday",
+        "wedding", "personal", "home", "house", "pet", "children", "parents",
+        "spouse", "partner", "love", "dating", "marriage", "health", "doctor",
+        "medical", "fitness", "exercise", "travel", "leisure", "entertainment",
+        "music", "movie", "book", "sport", "game", "restaurant", "food"
+    ]
+    
+    # Count keyword matches
+    professional_count = sum(1 for keyword in professional_keywords if keyword in full_text)
+    personal_count = sum(1 for keyword in personal_keywords if keyword in full_text)
+    
+    # Classify based on keyword density
+    if professional_count > personal_count:
+        return MemoryCategory.PROFESSIONAL
+    elif personal_count > 0:
+        return MemoryCategory.PERSONAL
+    else:
+        return MemoryCategory.OTHER
+
+
+async def upsert_memory(
+    content: str,
+    context: str,
+    *,
+    memory_id: Optional[uuid.UUID] = None,
+    # Hide these arguments from the model.
+    user_id: Annotated[str, InjectedToolArg],
+    store: Annotated[BaseStore, InjectedToolArg],
+):
+    """Upsert a memory in the database with category classification.
+
+    If a memory conflicts with an existing one, then just UPDATE the
+    existing one by passing in memory_id - don't create two memories
+    that are the same. If the user corrects a memory, UPDATE it.
+
+    Args:
+        content: The main content of the memory. For example:
+            "User expressed interest in learning about French."
+        context: Additional context for the memory. For example:
+            "This was mentioned while discussing career options in Europe."
+        memory_id: ONLY PROVIDE IF UPDATING AN EXISTING MEMORY.
+        The memory to overwrite.
+    """
+    # Classify the memory category
+    category = await classify_memory_category(content, context)
+    
+    mem_id = memory_id or uuid.uuid4()
+    
+    # Store memory with user_id and category
+    await store.aput(
+        ("memories", user_id, category.value),
+        key=str(mem_id),
+        value={
+            "content": content, 
+            "context": context,
+            "category": category.value
+        },
+    )
+    return f"Stored {category.value} memory {mem_id}"
+
+
+async def get_relevant_memories(
+    messages: list,
+    *,
+    user_id: Annotated[str, InjectedToolArg],
+    store: Annotated[BaseStore, InjectedToolArg],
+    limit: int = 10
+) -> list:
+    """Retrieve memories filtered by relevant categories based on recent messages.
+    
+    Args:
+        messages: Recent conversation messages to analyze for context
+        user_id: The user ID to retrieve memories for
+        store: The storage backend
+        limit: Maximum number of memories to retrieve
+        
+    Returns:
+        List of relevant memories
+    """
+    # Analyze recent messages to determine relevant categories
+    recent_text = " ".join([str(msg.content) for msg in messages[-3:] if hasattr(msg, 'content')])
+    
+    # Determine which categories are relevant
+    relevant_categories = []
+    
+    # Check for professional context
+    professional_indicators = [
+        "work", "job", "career", "office", "business", "meeting", "project",
+        "colleague", "manager", "client", "company", "professional"
+    ]
+    if any(indicator in recent_text.lower() for indicator in professional_indicators):
+        relevant_categories.append(MemoryCategory.PROFESSIONAL.value)
+    
+    # Check for personal context
+    personal_indicators = [
+        "family", "friend", "personal", "home", "hobby", "vacation", 
+        "relationship", "health", "travel", "entertainment"
+    ]
+    if any(indicator in recent_text.lower() for indicator in personal_indicators):
+        relevant_categories.append(MemoryCategory.PERSONAL.value)
+    
+    # If no specific category detected, include all categories
+    if not relevant_categories:
+        relevant_categories = [cat.value for cat in MemoryCategory]
+    
+    # Retrieve memories from relevant categories
+    all_memories = []
+    for category in relevant_categories:
+        try:
+            memories = await store.asearch(
+                ("memories", user_id, category),
+                query=recent_text,
+                limit=limit // len(relevant_categories) + 1,
+            )
+            all_memories.extend(memories)
+        except Exception:
+            # Handle case where category namespace doesn't exist yet
+            continue
+    
+    # Sort by similarity score and return top results
+    all_memories.sort(key=lambda x: x.score if hasattr(x, 'score') else 0, reverse=True)
+    return all_memories[:limit]
+
+
+
+
+File Name: utils.py
+
+-----------------------------
+
+File Content: 
+
+"""Utility functions used in our graph."""
+
+
+def split_model_and_provider(fully_specified_name: str) -> dict:
+    """Initialize the configured chat model."""
+    if "/" in fully_specified_name:
+        provider, model = fully_specified_name.split("/", maxsplit=1)
+    else:
+        provider = None
+        model = fully_specified_name
+    return {"model": model, "provider": provider}
+
+

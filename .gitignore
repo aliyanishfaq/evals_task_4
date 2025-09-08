@@ -7,9 +7,3 @@
 .tox/
 .cache/
 .mypy_cache/
-
-# Text dump files
-txt_dump/
-
-# Results files
-results/

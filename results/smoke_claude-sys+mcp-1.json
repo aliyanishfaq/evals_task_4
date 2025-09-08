@@ -1,0 +1,20 @@
+{
+  "candidate": "claude-sys+mcp-1",
+  "bucket": "smoke",
+  "points": 2,
+  "max_points": 10,
+  "details": [
+    {
+      "key": "compile",
+      "points": 2,
+      "passed": true,
+      "msg": "compiled app must expose .invoke"
+    },
+    {
+      "key": "invoke_accepts_canonical_state",
+      "points": 0,
+      "passed": false,
+      "msg": "PydanticInvalidForJsonSchema: Cannot generate a JsonSchema for core_schema.IsInstanceSchema (<class 'langgraph.store.base.BaseStore'>)\n\nFor further information visit https://errors.pydantic.dev/2.11/u/invalid-for-json-schema"
+    }
+  ]
+}

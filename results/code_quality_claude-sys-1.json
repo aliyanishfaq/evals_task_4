@@ -1,0 +1,62 @@
+{
+  "candidate": "claude-sys-1",
+  "bucket": "code_quality",
+  "points": 15.0,
+  "max_points": 23,
+  "details": [
+    {
+      "key": "code_quality_check",
+      "points": 1.5,
+      "passed": false,
+      "msg": "[LlmAsJudgeEvidence(issue='Overly complex interrupt implementation with multiple nodes and state management instead of simple interrupt in tool call', severity='major'), LlmAsJudgeEvidence(issue='Unnecessary complexity with separate category detection node and multiple routing functions', severity='major'), LlmAsJudgeEvidence(issue='Complex state management with pending_memories and user_confirmation fields that could be simplified', severity='minor')]"
+    },
+    {
+      "key": "code_correctness_check",
+      "points": 4.5,
+      "passed": false,
+      "msg": "[LlmAsJudgeEvidence(issue=\"Wrong import for interrupt - should be 'from langgraph.types import interrupt' but imported in graph.py\", severity='critical'), LlmAsJudgeEvidence(issue='Removed context parameter from llm.ainvoke call which may cause compatibility issues', severity='minor'), LlmAsJudgeEvidence(issue=\"Interrupt implementation doesn't properly handle user response - interrupt is called but response handling is complex and error-prone\", severity='major')]"
+    },
+    {
+      "key": "presence_of_interrupt",
+      "points": 2,
+      "passed": true,
+      "msg": "Presence of interrupt is present"
+    },
+    {
+      "key": "user_id_and_category_wise_storage",
+      "points": 2,
+      "passed": true,
+      "msg": "User id and category wise storage is present"
+    },
+    {
+      "key": "correct_categories",
+      "points": 1,
+      "passed": true,
+      "msg": "Correct categories is present"
+    },
+    {
+      "key": "category_retrieval",
+      "points": 1,
+      "passed": true,
+      "msg": "Category retrieval is present"
+    },
+    {
+      "key": "functional_interrupt",
+      "points": 0,
+      "passed": false,
+      "msg": "Functional interrupt is not present"
+    },
+    {
+      "key": "llm_based_categorization",
+      "points": 2,
+      "passed": true,
+      "msg": "LLM based categorization is present"
+    },
+    {
+      "key": "no_test_files",
+      "points": 1,
+      "passed": true,
+      "msg": "No test files is present"
+    }
+  ]
+}

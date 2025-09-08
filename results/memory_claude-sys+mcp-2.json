@@ -1,0 +1,44 @@
+{
+  "candidate": "claude-sys+mcp-2",
+  "bucket": "memory_category",
+  "points": 7,
+  "max_points": 9,
+  "details": [
+    {
+      "key": "accept_professional_interrupt",
+      "points": 2,
+      "passed": true,
+      "msg": "Interrupt detected for professional acceptance test"
+    },
+    {
+      "key": "memory_stored_professional",
+      "points": 0,
+      "passed": false,
+      "msg": "No memory found in professional category when accepted"
+    },
+    {
+      "key": "accept_personal_interrupt",
+      "points": 2,
+      "passed": true,
+      "msg": "Interrupt detected for personal acceptance test"
+    },
+    {
+      "key": "memory_stored_personal",
+      "points": 0,
+      "passed": false,
+      "msg": "No memory found in personal category when accepted"
+    },
+    {
+      "key": "reject_interrupt_detected",
+      "points": 2,
+      "passed": true,
+      "msg": "Interrupt detected for rejection test"
+    },
+    {
+      "key": "memory_not_stored_on_reject",
+      "points": 1,
+      "passed": true,
+      "msg": "Memory correctly NOT stored in professional category when rejected"
+    }
+  ]
+}
