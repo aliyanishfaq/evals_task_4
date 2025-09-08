@@ -1,20 +1,20 @@
 {
-  "candidate": "claude-vanilla-2",
+  "candidate": "claude-sys-2",
   "bucket": "code_quality",
-  "points": 16.5,
+  "points": 19.5,
   "max_points": 23,
   "details": [
     {
       "key": "code_quality_check",
       "points": 2.5,
       "passed": false,
-      "msg": "[LlmAsJudgeEvidence(issue='Missing separate prompt file for LLM classification - classification prompt is hardcoded in tools.py instead of being in prompts.py', severity='minor'), LlmAsJudgeEvidence(issue='Overly complex interrupt implementation with additional state fields and multiple nodes instead of using simple interrupt() function', severity='major')]"
+      "msg": "[LlmAsJudgeEvidence(issue='Overly complex interrupt implementation with unnecessary state management and multiple nodes instead of simple interrupt in tool call', severity='major'), LlmAsJudgeEvidence(issue='Missing separate categorization prompt in prompts.py file - categorization logic is embedded in tools instead of being properly separated', severity='minor')]"
     },
     {
       "key": "code_correctness_check",
-      "points": 5,
-      "passed": false,
-      "msg": "[LlmAsJudgeEvidence(issue=\"llm = init_chat_model() missing required model parameter, should be llm = init_chat_model('anthropic:claude-3-5-sonnet-latest')\", severity='critical'), LlmAsJudgeEvidence(issue='context=utils.split_model_and_provider(model) parameter should be removed from llm.bind_tools().ainvoke() call', severity='major')]"
+      "points": 8,
+      "passed": true,
+      "msg": "[]"
     },
     {
       "key": "presence_of_interrupt",
