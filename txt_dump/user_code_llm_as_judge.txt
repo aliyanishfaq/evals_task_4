@@ -55,6 +55,7 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import cast
+import re
 
 from langchain.chat_models import init_chat_model
 from langgraph.graph import END, StateGraph
@@ -71,23 +72,114 @@ logger = logging.getLogger(__name__)
 llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 
 
+def classify_conversation_category(messages: list) -> list[str]:
+    """Classify the conversation to determine which memory categories to search."""
+    recent_content = " ".join([
+        getattr(m, 'content', '') for m in messages[-3:] 
+        if hasattr(m, 'content') and getattr(m, 'content', None)
+    ])
+    
+    categories = []
+    
+    # Personal keywords
+    personal_keywords = [
+        'family', 'wife', 'husband', 'child', 'parent', 'sibling', 'friend', 'hobby', 
+        'personal', 'home', 'vacation', 'travel', 'health', 'relationship', 'love',
+        'like', 'prefer', 'enjoy', 'favorite', 'birthday', 'anniversary'
+    ]
+    
+    # Professional keywords
+    professional_keywords = [
+        'work', 'job', 'career', 'office', 'manager', 'colleague', 'client', 'project',
+        'meeting', 'business', 'company', 'skill', 'certification', 'degree', 'education',
+        'interview', 'salary', 'promotion', 'professional'
+    ]
+    
+    content_lower = recent_content.lower()
+    
+    if any(keyword in content_lower for keyword in personal_keywords):
+        categories.append("personal")
+    
+    if any(keyword in content_lower for keyword in professional_keywords):
+        categories.append("professional")
+    
+    # If no specific category detected or general conversation, include other
+    if not categories or len(categories) == 2:
+        categories.append("other")
+    
+    return categories if categories else ["personal", "professional", "other"]
+
+
 async def call_model(state: State, runtime: Runtime[Context]) -> dict:
     """Extract the user's state from the conversation and update the memory."""
     user_id = runtime.context.user_id
     model = runtime.context.model
     system_prompt = runtime.context.system_prompt
 
-    # Retrieve relevant memories based on category filtering
-    memories = await tools.get_relevant_memories(
-        messages=state.messages,
-        user_id=user_id,
-        store=cast(BaseStore, runtime.store),
-        limit=10,
-    )
+    # Check if we're awaiting user confirmation
+    if state.awaiting_confirmation and state.pending_memory:
+        last_message_content = getattr(state.messages[-1], 'content', '').lower().strip()
+        
+        if last_message_content == "accept":
+            # User confirmed, save the memory
+            mem_data = state.pending_memory
+            await tools.classify_and_store_memory(
+                content=mem_data["content"],
+                context=mem_data["context"], 
+                category=mem_data["category"],
+                user_id=user_id,
+                store=cast(BaseStore, runtime.store),
+            )
+            response_msg = f"Great! I've saved that {mem_data['category']} memory."
+            return {
+                "messages": [{"role": "assistant", "content": response_msg}],
+                "pending_memory": None,
+                "awaiting_confirmation": False
+            }
+        else:
+            # User declined, don't save
+            response_msg = "Okay, I won't save that information."
+            return {
+                "messages": [{"role": "assistant", "content": response_msg}],
+                "pending_memory": None,
+                "awaiting_confirmation": False
+            }
+
+    # Determine conversation category for memory retrieval
+    categories_to_search = classify_conversation_category(state.messages)
+    
+    # Retrieve relevant memories based on conversation category
+    all_memories = []
+    query_content = " ".join([
+        getattr(m, 'content', '') for m in state.messages[-3:] 
+        if hasattr(m, 'content') and getattr(m, 'content', None)
+    ])
+    
+    for category in categories_to_search:
+        try:
+            memories = await cast(BaseStore, runtime.store).asearch(
+                ("memories", user_id, category),
+                query=query_content,
+                limit=5,
+            )
+            all_memories.extend(memories)
+        except Exception:
+            # Fallback to old format if new format doesn't exist yet
+            memories = await cast(BaseStore, runtime.store).asearch(
+                ("memories", user_id),
+                query=query_content,
+                limit=5,
+            )
+            all_memories.extend(memories)
+            break
+
+    # Sort by relevance and limit
+    all_memories.sort(key=lambda x: x.score if x.score else 0, reverse=True)
+    all_memories = all_memories[:10]
 
     # Format memories for inclusion in the prompt
     formatted = "\n".join(
-        f"[{mem.key}]: {mem.value} (similarity: {mem.score})" for mem in memories
+        f"[{mem.key}]: {mem.value} (similarity: {mem.score})" for mem in all_memories
     )
     if formatted:
         formatted = f"""
@@ -96,86 +188,71 @@ async def call_model(state: State, runtime: Runtime[Context]) -> dict:
 </memories>"""
 
     # Prepare the system prompt with user memories and current time
-    # This helps the model understand the context and temporal relevance
     sys = system_prompt.format(user_info=formatted, time=datetime.now().isoformat())
 
-    # Invoke the language model with the prepared prompt and tools
-    # "bind_tools" gives the LLM the JSON schema for all tools in the list so it knows how
-    # to use them.
-    msg = await llm.bind_tools([tools.upsert_memory]).ainvoke(
+    # Invoke the language model with the new categorized memory tool
+    msg = await llm.bind_tools([tools.classify_and_store_memory]).ainvoke(
         [{"role": "system", "content": sys}, *state.messages],
     )
     return {"messages": [msg]}
 
 
 async def request_confirmation(state: State, runtime: Runtime[Context]):
-    """Request user confirmation before saving memories."""
+    """Instead of storing memory immediately, request user confirmation."""
     # Extract tool calls from the last message
     tool_calls = getattr(state.messages[-1], "tool_calls", [])
     
     if not tool_calls:
-        return {}
+        return {"messages": []}
     
-    # Format pending memories for user review
-    memory_summaries = []
-    for tc in tool_calls:
-        args = tc["args"]
-        content = args.get("content", "")
-        context = args.get("context", "")
-        # Classify category for display
-        category = await tools.classify_memory_category(content, context)
-        memory_summaries.append(f"- [{category.value.upper()}] {content} (Context: {context})")
+    # For now, handle only the first memory request
+    tc = tool_calls[0]
+    args = tc["args"]
     
-    confirmation_message = f"""I want to save the following memories:
-
-{chr(10).join(memory_summaries)}
-
-Please type 'accept' to save these memories, or anything else to reject them."""
+    # Store the pending memory in state
+    pending_memory = {
+        "content": args["content"],
+        "context": args["context"], 
+        "category": args["category"],
+        "tool_call_id": tc["id"]
+    }
+    
+    # Create confirmation message
+    confirmation_msg = f"I'd like to remember that {args['content']}. Should I save this? (respond with 'accept' to save)"
+    
+    # Return mock tool result and confirmation request
+    tool_result = {
+        "role": "tool",
+        "content": "Memory prepared for user confirmation",
+        "tool_call_id": tc["id"],
+    }
+    
+    assistant_msg = {
+        "role": "assistant", 
+        "content": confirmation_msg
+    }
     
     return {
-        "messages": [{"role": "assistant", "content": confirmation_message}],
-        "pending_memories": tool_calls
+        "messages": [tool_result, assistant_msg],
+        "pending_memory": pending_memory,
+        "awaiting_confirmation": True
     }
 
 
-def route_message(state: State):
-    """Determine the next step based on the presence of tool calls and pending memories."""
-    # Check if we have pending memories and user response
-    if (hasattr(state, 'pending_memories') and state.pending_memories and 
-        state.messages and hasattr(state.messages[-1], 'role') and 
-        getattr(state.messages[-1], 'role') == 'human'):
-        
-        # User has responded to confirmation request
-        user_response = getattr(state.messages[-1], 'content', '').strip().lower()
-        
-        if user_response == "accept":
-            return "store_accepted_memories"
-        else:
-            return "reject_memories"
-    
-    # Check for new tool calls that need confirmation
-    msg = state.messages[-1]
-    if getattr(msg, "tool_calls", None):
-        return "request_confirmation"
-        
-    # Otherwise, finish; user can send the next message
-    return END
+# Keep the old store_memory for backward compatibility
+async def store_memory(state: State, runtime: Runtime[Context]):
+    # Extract tool calls from the last message
+    tool_calls = getattr(state.messages[-1], "tool_calls", [])
 
-
-async def store_accepted_memories(state: State, runtime: Runtime[Context]):
-    """Store memories that user has accepted."""
-    if not state.pending_memories:
-        return {"messages": [{"role": "assistant", "content": "No memories to save."}]}
-    
-    # Execute all upsert_memory calls for confirmed memories
+    # Concurrently execute all classify_and_store_memory calls  
     saved_memories = await asyncio.gather(
         *(
-            tools.upsert_memory(
+            tools.classify_and_store_memory(
                 **tc["args"],
                 user_id=runtime.context.user_id,
                 store=cast(BaseStore, runtime.store),
             )
-            for tc in state.pending_memories
+            for tc in tool_calls
         )
     )
 
@@ -186,17 +263,19 @@ async def store_accepted_memories(state: State, runtime: Runtime[Context]):
             "content": mem,
             "tool_call_id": tc["id"],
         }
-        for tc, mem in zip(state.pending_memories, saved_memories)
+        for tc, mem in zip(tool_calls, saved_memories)
     ]
-    
-    confirmation_msg = {"role": "assistant", "content": "Memories have been saved successfully!"}
-    return {"messages": results + [confirmation_msg], "pending_memories": None}
+    return {"messages": results}
 
 
-async def reject_memories(state: State, runtime: Runtime[Context]):
-    """Handle rejection of memories."""
-    rejection_msg = {"role": "assistant", "content": "Memories were not saved as requested."}
-    return {"messages": [rejection_msg], "pending_memories": None}
+def route_message(state: State):
+    """Determine the next step based on the presence of tool calls and state."""
+    msg = state.messages[-1]
+    if getattr(msg, "tool_calls", None):
+        # If there are tool calls, request confirmation first
+        return "request_confirmation"
+    # Otherwise, finish; user can send the next message
+    return END
 
 
 # Create the graph + all nodes
@@ -206,24 +285,12 @@ builder = StateGraph(State, context_schema=Context)
 builder.add_node(call_model)
 builder.add_edge("__start__", "call_model")
 
-# Add nodes for memory confirmation workflow
+# Add the new confirmation request node
 builder.add_node(request_confirmation)
-builder.add_node(store_accepted_memories)
-builder.add_node(reject_memories)
+builder.add_conditional_edges("call_model", route_message, ["request_confirmation", END])
 
-# Route from call_model based on tool calls and user responses
-builder.add_conditional_edges(
-    "call_model", 
-    route_message, 
-    ["request_confirmation", "store_accepted_memories", "reject_memories", END]
-)
-
-# After requesting confirmation, wait for user response (return to user)
+# After requesting confirmation, return control to user
 builder.add_edge("request_confirmation", END)
-
-# After storing or rejecting memories, go back to call_model
-builder.add_edge("store_accepted_memories", "call_model")
-builder.add_edge("reject_memories", "call_model")
 
 graph = builder.compile()
 graph.name = "MemoryAgent"
@@ -246,9 +313,33 @@ File Content:
 
 SYSTEM_PROMPT = """You are a helpful and friendly chatbot. Get to know the user! \
 Ask questions! Be spontaneous! 
+
+When you identify information that should be remembered about the user:
+1. First classify it as "personal" (family, hobbies, preferences), "professional" (work, career, skills), or "other" (general knowledge, casual facts)
+2. Before saving ANY memory, you MUST ask the user: "I'd like to remember that [brief summary of the memory]. Should I save this? (respond with 'accept' to save)"
+3. Only call the classify_and_store_memory tool after the user confirms with "accept"
+4. If they respond with anything else, do not save the memory
+
+When retrieving memories to provide context, determine the category of the current conversation:
+- If discussing personal life, family, hobbies → search "personal" memories
+- If discussing work, career, professional topics → search "professional" memories  
+- If discussing general topics → search "other" memories
+- If unsure, search all categories
+
 {user_info}
 
 System Time: {time}"""
+
+MEMORY_CLASSIFICATION_PROMPT = """Based on the conversation context, classify what category this memory belongs to:
+
+PERSONAL: Family, relationships, personal hobbies, personal preferences, health, personal experiences, personal goals
+PROFESSIONAL: Work, career, job, business, professional skills, work projects, professional networking, education, certifications
+OTHER: General knowledge, casual conversations, facts, opinions on general topics, entertainment preferences
+
+Content: {content}
+Context: {context}
+
+Category (personal/professional/other):"""
 
 
 
@@ -264,6 +355,7 @@ File Content:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional, Dict, Any
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
@@ -277,11 +369,11 @@ class State:
     messages: Annotated[list[AnyMessage], add_messages]
     """The messages in the conversation."""
     
-    pending_memories: list = None
-    """Memories awaiting user confirmation."""
+    pending_memory: Optional[Dict[str, Any]] = None
+    """Memory awaiting user confirmation before saving."""
     
-    user_confirmation: str = None
-    """User's confirmation response for pending memories."""
+    awaiting_confirmation: bool = False
+    """Whether we're waiting for user confirmation to save a memory."""
 
 
 __all__ = [
@@ -300,64 +392,49 @@ File Content:
 """Define he agent's tools."""
 
 import uuid
-from typing import Annotated, Optional
-from enum import Enum
+from typing import Annotated, Optional, Literal
 
 from langchain_core.tools import InjectedToolArg
 from langgraph.store.base import BaseStore
 
 
-class MemoryCategory(Enum):
-    """Categories for organizing memories."""
-    PERSONAL = "personal"
-    PROFESSIONAL = "professional"
-    OTHER = "other"
+async def classify_and_store_memory(
+    content: str,
+    context: str,
+    category: Literal["personal", "professional", "other"],
+    *,
+    memory_id: Optional[uuid.UUID] = None,
+    # Hide these arguments from the model.
+    user_id: Annotated[str, InjectedToolArg],
+    store: Annotated[BaseStore, InjectedToolArg],
+):
+    """Classify and store a memory in the database with category.
 
+    First determines if this memory should be saved (requires user confirmation).
+    Then stores it in the appropriate category-based namespace.
 
-async def classify_memory_category(content: str, context: str) -> MemoryCategory:
-    """Classify a memory into personal, professional, or other categories.
-    
     Args:
-        content: The main content of the memory
-        context: Additional context for the memory
-        
-    Returns:
-        MemoryCategory: The classified category
+        content: The main content of the memory. For example:
+            "User expressed interest in learning about French."
+        context: Additional context for the memory. For example:
+            "This was mentioned while discussing career options in Europe."
+        category: The category of the memory - "personal", "professional", or "other".
+            - personal: Personal life, family, hobbies, personal preferences
+            - professional: Work, career, business, professional skills
+            - other: General knowledge, casual conversations, miscellaneous
+        memory_id: ONLY PROVIDE IF UPDATING AN EXISTING MEMORY.
     """
-    # Combine content and context for classification
-    full_text = f"{content} {context}".lower()
-    
-    # Professional keywords
-    professional_keywords = [
-        "work", "job", "career", "office", "business", "meeting", "project",
-        "colleague", "manager", "client", "company", "salary", "promotion",
-        "interview", "resume", "deadline", "conference", "professional",
-        "industry", "corporate", "enterprise", "startup", "team", "boss",
-        "employee", "workplace", "coworker"
-    ]
-    
-    # Personal keywords
-    personal_keywords = [
-        "family", "friend", "relationship", "hobby", "vacation", "birthday",
-        "wedding", "personal", "home", "house", "pet", "children", "parents",
-        "spouse", "partner", "love", "dating", "marriage", "health", "doctor",
-        "medical", "fitness", "exercise", "travel", "leisure", "entertainment",
-        "music", "movie", "book", "sport", "game", "restaurant", "food"
-    ]
-    
-    # Count keyword matches
-    professional_count = sum(1 for keyword in professional_keywords if keyword in full_text)
-    personal_count = sum(1 for keyword in personal_keywords if keyword in full_text)
-    
-    # Classify based on keyword density
-    if professional_count > personal_count:
-        return MemoryCategory.PROFESSIONAL
-    elif personal_count > 0:
-        return MemoryCategory.PERSONAL
-    else:
-        return MemoryCategory.OTHER
+    # This function will now be called only after user confirmation
+    mem_id = memory_id or uuid.uuid4()
+    await store.aput(
+        ("memories", user_id, category),
+        key=str(mem_id),
+        value={"content": content, "context": context, "category": category},
+    )
+    return f"Stored {category} memory {mem_id}"
 
 
+# Keep the old function for backward compatibility
 async def upsert_memory(
     content: str,
     context: str,
@@ -367,7 +444,7 @@ async def upsert_memory(
     user_id: Annotated[str, InjectedToolArg],
     store: Annotated[BaseStore, InjectedToolArg],
 ):
-    """Upsert a memory in the database with category classification.
+    """Upsert a memory in the database.
 
     If a memory conflicts with an existing one, then just UPDATE the
     existing one by passing in memory_id - don't create two memories
@@ -381,84 +458,44 @@ async def upsert_memory(
         memory_id: ONLY PROVIDE IF UPDATING AN EXISTING MEMORY.
         The memory to overwrite.
     """
-    # Classify the memory category
-    category = await classify_memory_category(content, context)
-    
     mem_id = memory_id or uuid.uuid4()
-    
-    # Store memory with user_id and category
     await store.aput(
-        ("memories", user_id, category.value),
+        ("memories", user_id),
         key=str(mem_id),
-        value={
-            "content": content, 
-            "context": context,
-            "category": category.value
-        },
+        value={"content": content, "context": context},
     )
-    return f"Stored {category.value} memory {mem_id}"
+    return f"Stored memory {mem_id}"
 
 
-async def get_relevant_memories(
-    messages: list,
+async def retrieve_memories_by_category(
+    query: str,
+    categories: list[Literal["personal", "professional", "other"]],
     *,
+    limit: int = 10,
+    # Hide these arguments from the model.
     user_id: Annotated[str, InjectedToolArg],
     store: Annotated[BaseStore, InjectedToolArg],
-    limit: int = 10
-) -> list:
-    """Retrieve memories filtered by relevant categories based on recent messages.
-    
+):
+    """Retrieve memories from specific categories based on a query.
+
     Args:
-        messages: Recent conversation messages to analyze for context
-        user_id: The user ID to retrieve memories for
-        store: The storage backend
-        limit: Maximum number of memories to retrieve
-        
-    Returns:
-        List of relevant memories
+        query: The search query to find relevant memories.
+        categories: List of categories to search in (personal, professional, other).
+        limit: Maximum number of memories to retrieve per category.
     """
-    # Analyze recent messages to determine relevant categories
-    recent_text = " ".join([str(msg.content) for msg in messages[-3:] if hasattr(msg, 'content')])
-    
-    # Determine which categories are relevant
-    relevant_categories = []
-    
-    # Check for professional context
-    professional_indicators = [
-        "work", "job", "career", "office", "business", "meeting", "project",
-        "colleague", "manager", "client", "company", "professional"
-    ]
-    if any(indicator in recent_text.lower() for indicator in professional_indicators):
-        relevant_categories.append(MemoryCategory.PROFESSIONAL.value)
-    
-    # Check for personal context
-    personal_indicators = [
-        "family", "friend", "personal", "home", "hobby", "vacation", 
-        "relationship", "health", "travel", "entertainment"
-    ]
-    if any(indicator in recent_text.lower() for indicator in personal_indicators):
-        relevant_categories.append(MemoryCategory.PERSONAL.value)
-    
-    # If no specific category detected, include all categories
-    if not relevant_categories:
-        relevant_categories = [cat.value for cat in MemoryCategory]
-    
-    # Retrieve memories from relevant categories
     all_memories = []
-    for category in relevant_categories:
-        try:
-            memories = await store.asearch(
-                ("memories", user_id, category),
-                query=recent_text,
-                limit=limit // len(relevant_categories) + 1,
-            )
-            all_memories.extend(memories)
-        except Exception:
-            # Handle case where category namespace doesn't exist yet
-            continue
     
-    # Sort by similarity score and return top results
-    all_memories.sort(key=lambda x: x.score if hasattr(x, 'score') else 0, reverse=True)
+    for category in categories:
+        memories = await store.asearch(
+            ("memories", user_id, category),
+            query=query,
+            limit=limit,
+        )
+        all_memories.extend(memories)
+    
+    # Sort by relevance score
+    all_memories.sort(key=lambda x: x.score if x.score else 0, reverse=True)
+    
     return all_memories[:limit]
 
 
