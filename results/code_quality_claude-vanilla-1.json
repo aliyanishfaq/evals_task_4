@@ -14,7 +14,7 @@
       "key": "code_correctness_check",
       "points": 4,
       "passed": false,
-      "msg": "[LlmAsJudgeEvidence(issue=\"LLM initialization error - init_chat_model() called without required model parameter, should be init_chat_model('anthropic:claude-3-5-sonnet-latest')\", severity='major'), LlmAsJudgeEvidence(issue='Invalid context parameter passed to LLM - context=utils.split_model_and_provider(model) should be removed as it causes runtime errors', severity='major'), LlmAsJudgeEvidence(issue=\"Interrupt implementation uses input() which doesn't work in LangGraph runtime environment - should use langgraph.types.interrupt instead\", severity='critical')]"
+      "msg": "[LlmAsJudgeEvidence(issue=\"LLM initialization error - init_chat_model() called without required model parameter, should be init_chat_model('anthropic:claude-3-5-sonnet-latest')\", severity='major'), LlmAsJudgeEvidence(issue='Invalid context parameter passed to LLM - context=utils.split_model_and_provider(model) should be removed as it causes runtime errors', severity='major'), LlmAsJudgeEvidence(issue=\"Interrupt implementation uses input() which doesn't work in LangGraph runtime - should use langgraph.types.interrupt() instead\", severity='critical')]"
     },
     {
       "key": "presence_of_interrupt",

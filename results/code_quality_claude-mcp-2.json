@@ -1,20 +1,20 @@
 {
   "candidate": "claude-mcp-2",
   "bucket": "code_quality",
-  "points": 14.5,
+  "points": 11.5,
   "max_points": 23,
   "details": [
     {
       "key": "code_quality_check",
-      "points": 1.5,
+      "points": 1,
       "passed": false,
-      "msg": "[LlmAsJudgeEvidence(issue='Memory classification uses hardcoded keyword matching instead of LLM-based categorization, making it brittle and less accurate', severity='major'), LlmAsJudgeEvidence(issue=\"Complex interrupt implementation with custom state management instead of using langgraph's built-in interrupt functionality\", severity='major'), LlmAsJudgeEvidence(issue='Unnecessary complexity in graph flow with custom confirmation handling that could be simplified', severity='minor')]"
+      "msg": "[LlmAsJudgeEvidence(issue='Missing separate prompt file for LLM classification - categorization logic is hardcoded with keyword matching instead of using LLM-based classification', severity='major'), LlmAsJudgeEvidence(issue='Overly complex interrupt implementation with additional state fields (pending_memory, awaiting_confirmation) when simpler approach using langgraph.types.interrupt would suffice', severity='major'), LlmAsJudgeEvidence(issue='Unnecessary complexity in graph flow with additional request_confirmation node and complex state management instead of using built-in interrupt functionality', severity='major')]"
     },
     {
       "key": "code_correctness_check",
-      "points": 6.0,
+      "points": 3.5,
       "passed": false,
-      "msg": "[LlmAsJudgeEvidence(issue='Missing import for langgraph.types.interrupt which is used in the expert implementation', severity='major'), LlmAsJudgeEvidence(issue=\"DocString validation error - 'personal' mentioned in docstring but not in function signature\", severity='minor'), LlmAsJudgeEvidence(issue='LLM initialization should specify model name to avoid positional argument errors', severity='minor')]"
+      "msg": "[LlmAsJudgeEvidence(issue=\"LLM initialization error: llm = init_chat_model() missing required model parameter, should be llm = init_chat_model('anthropic:claude-3-5-sonnet-latest')\", severity='critical'), LlmAsJudgeEvidence(issue='Invalid context parameter in llm.bind_tools call: context=utils.split_model_and_provider(model) should be removed as it causes runtime errors', severity='critical'), LlmAsJudgeEvidence(issue=\"Docstring validation error in classify_and_store_memory function: bullet points in docstring don't match function signature parameters\", severity='minor')]"
     },
     {
       "key": "presence_of_interrupt",

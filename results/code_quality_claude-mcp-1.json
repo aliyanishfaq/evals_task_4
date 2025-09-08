@@ -1,7 +1,7 @@
 {
   "candidate": "claude-mcp-1",
   "bucket": "code_quality",
-  "points": 14.5,
+  "points": 11.0,
   "max_points": 23,
   "details": [
     {
@@ -12,9 +12,9 @@
     },
     {
       "key": "code_correctness_check",
-      "points": 8,
-      "passed": true,
-      "msg": "[]"
+      "points": 4.5,
+      "passed": false,
+      "msg": "[LlmAsJudgeEvidence(issue=\"Missing required positional argument for init_chat_model() - should be init_chat_model('anthropic:claude-3-5-sonnet-latest')\", severity='critical'), LlmAsJudgeEvidence(issue='Invalid context parameter passed to llm.ainvoke() - context=utils.split_model_and_provider(model) should be removed', severity='major'), LlmAsJudgeEvidence(issue='State class fields pending_memories and user_confirmation are not properly typed with Annotated for langgraph compatibility', severity='minor')]"
     },
     {
       "key": "presence_of_interrupt",

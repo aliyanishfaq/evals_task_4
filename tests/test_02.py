@@ -16,6 +16,9 @@ HUMAN_NOTES = """
 llm = init_chat_model() should be llm = init_chat_model("anthropic:claude-3-5-sonnet-latest") otherwise we get a positional argument error.
 2. Local/Deployed testing:
     - context=utils.split_model_and_provider(model), should be removed.
+3. Local/Deployed testing:
+ValueError: Arg - personal in docstring not found in function signature.
+Remove unecessary bullet points/list from docstring.
 """
 
 class LlmAsJudgeEvidence(BaseModel):

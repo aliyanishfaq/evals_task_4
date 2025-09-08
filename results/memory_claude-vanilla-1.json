@@ -1,0 +1,14 @@
+{
+  "candidate": "claude-vanilla-1",
+  "bucket": "memory_category",
+  "points": 0,
+  "max_points": 11,
+  "details": [
+    {
+      "key": "test_execution_error",
+      "points": 0,
+      "passed": false,
+      "msg": "pytest: reading from stdin while output is captured!  Consider using `-s`."
+    }
+  ]
+}

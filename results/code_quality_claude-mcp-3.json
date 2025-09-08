@@ -1,0 +1,62 @@
+{
+  "candidate": "claude-mcp-3",
+  "bucket": "code_quality",
+  "points": 16.5,
+  "max_points": 23,
+  "details": [
+    {
+      "key": "code_quality_check",
+      "points": 2.5,
+      "passed": false,
+      "msg": "[LlmAsJudgeEvidence(issue='Complex interrupt implementation with multiple nodes and state management instead of using simple langgraph interrupt() function', severity='major'), LlmAsJudgeEvidence(issue='Missing CATEGORY_PROMPT in prompts.py file - categorization prompts should be separated into the prompts file', severity='minor')]"
+    },
+    {
+      "key": "code_correctness_check",
+      "points": 5,
+      "passed": false,
+      "msg": "[LlmAsJudgeEvidence(issue=\"llm = init_chat_model() missing required model parameter, should be llm = init_chat_model('anthropic:claude-3-5-sonnet-latest')\", severity='critical'), LlmAsJudgeEvidence(issue='context=utils.split_model_and_provider(model) parameter should be removed from llm.bind_tools().ainvoke() call', severity='major')]"
+    },
+    {
+      "key": "presence_of_interrupt",
+      "points": 2,
+      "passed": true,
+      "msg": "Presence of interrupt is present"
+    },
+    {
+      "key": "user_id_and_category_wise_storage",
+      "points": 2,
+      "passed": true,
+      "msg": "User id and category wise storage is present"
+    },
+    {
+      "key": "correct_categories",
+      "points": 1,
+      "passed": true,
+      "msg": "Correct categories is present"
+    },
+    {
+      "key": "category_retrieval",
+      "points": 1,
+      "passed": true,
+      "msg": "Category retrieval is present"
+    },
+    {
+      "key": "functional_interrupt",
+      "points": 0,
+      "passed": false,
+      "msg": "Functional interrupt is not present"
+    },
+    {
+      "key": "llm_based_categorization",
+      "points": 2,
+      "passed": true,
+      "msg": "LLM based categorization is present"
+    },
+    {
+      "key": "no_test_files",
+      "points": 1,
+      "passed": true,
+      "msg": "No test files is present"
+    }
+  ]
+}
