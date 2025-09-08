@@ -1,7 +1,7 @@
 {
   "candidate": "claude-mcp-2",
   "bucket": "smoke",
-  "points": 10,
+  "points": 6,
   "max_points": 10,
   "details": [
     {
@@ -30,15 +30,9 @@
     },
     {
       "key": "last_is_ai",
-      "points": 3,
-      "passed": true,
+      "points": 0,
+      "passed": false,
       "msg": "last message must be AIMessage"
-    },
-    {
-      "key": "last_ai_non_empty",
-      "points": 1,
-      "passed": true,
-      "msg": "final AI message does not have empty content"
     }
   ]
 }

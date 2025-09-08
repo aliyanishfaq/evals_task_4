@@ -1,26 +1,26 @@
 {
   "candidate": "claude-mcp-1",
   "bucket": "code_quality",
-  "points": 11.0,
+  "points": 12.5,
   "max_points": 23,
   "details": [
     {
       "key": "code_quality_check",
-      "points": 1.5,
+      "points": 1.0,
       "passed": false,
-      "msg": "[LlmAsJudgeEvidence(issue='Uses keyword-based classification instead of LLM-based categorization for memory classification, making it brittle and less accurate', severity='major'), LlmAsJudgeEvidence(issue='Complex interrupt implementation with multiple nodes and state management instead of using simple langgraph interrupt() function', severity='major'), LlmAsJudgeEvidence(issue='Added unnecessary fields to State class (pending_memories, user_confirmation) that complicate the architecture', severity='minor')]"
+      "msg": "[LlmAsJudgeEvidence(issue='Uses keyword-based classification instead of LLM-based categorization for memory classification, making it brittle and less accurate', severity='major'), LlmAsJudgeEvidence(issue='Complex interrupt implementation with custom state management instead of using the simple langgraph interrupt() function', severity='major'), LlmAsJudgeEvidence(issue='Added unnecessary tools (classify_memory_category, retrieve_memories_by_category) that complicate the architecture', severity='minor'), LlmAsJudgeEvidence(issue='Custom state fields (pending_memories, awaiting_memory_confirmation) add unnecessary complexity', severity='minor')]"
     },
     {
       "key": "code_correctness_check",
       "points": 4.5,
       "passed": false,
-      "msg": "[LlmAsJudgeEvidence(issue=\"Missing required positional argument for init_chat_model() - should be init_chat_model('anthropic:claude-3-5-sonnet-latest')\", severity='critical'), LlmAsJudgeEvidence(issue='Invalid context parameter passed to llm.ainvoke() - context=utils.split_model_and_provider(model) should be removed', severity='major'), LlmAsJudgeEvidence(issue='State class fields pending_memories and user_confirmation are not properly typed with Annotated for langgraph compatibility', severity='minor')]"
+      "msg": "[LlmAsJudgeEvidence(issue='llm = init_chat_model() missing required model parameter causes positional argument error', severity='critical'), LlmAsJudgeEvidence(issue='context=utils.split_model_and_provider(model) parameter causes runtime errors', severity='major'), LlmAsJudgeEvidence(issue='ValueError: Arg Returns in docstring not found in function signature in tools.py', severity='minor')]"
     },
     {
       "key": "presence_of_interrupt",
-      "points": 0,
-      "passed": false,
-      "msg": "Presence of interrupt is not present"
+      "points": 2,
+      "passed": true,
+      "msg": "Presence of interrupt is present"
     },
     {
       "key": "user_id_and_category_wise_storage",

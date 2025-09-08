@@ -17,8 +17,7 @@ llm = init_chat_model() should be llm = init_chat_model("anthropic:claude-3-5-so
 2. Local/Deployed testing:
     - context=utils.split_model_and_provider(model), should be removed.
 3. Local/Deployed testing:
-ValueError: Arg - personal in docstring not found in function signature.
-Remove unecessary bullet points/list from docstring.
+ValueError: Arg Returns in docstring not found in function signature.
 """
 
 class LlmAsJudgeEvidence(BaseModel):
